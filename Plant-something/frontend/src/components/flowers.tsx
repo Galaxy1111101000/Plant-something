@@ -1,7 +1,9 @@
 import { useState } from "react";
 import {
   Dimensions,
+  Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -19,6 +21,7 @@ const { width, height } = Dimensions.get("window");
 const ZOOM = 2;
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
+const FLOWER_SIZE = 100;
 
 const maxOffset = (scale: number) => {
   "worklet";
@@ -39,6 +42,41 @@ const clampWithRubberBand = (value: number, limit: number) => {
   return value;
 };
 
+type PlantKey =
+  | "columbine"
+  | "honeysuckle"
+  | "milkweed"
+  | "ninebark"
+  | "oak"
+  | "serviceberry";
+
+const PLANT_ORDER: PlantKey[] = [
+  "columbine",
+  "honeysuckle",
+  "milkweed",
+  "ninebark",
+  "oak",
+  "serviceberry",
+];
+
+const PLANT_IMAGES: Record<PlantKey, any> = {
+  columbine: require("../../assets/images/plants/columbine.png"),
+  honeysuckle: require("../../assets/images/plants/honeysuckle.png"),
+  milkweed: require("../../assets/images/plants/milkweed.png"),
+  ninebark: require("../../assets/images/plants/ninebark.png"),
+  oak: require("../../assets/images/plants/oak.png"),
+  serviceberry: require("../../assets/images/plants/serviceberry.png"),
+};
+
+const PLANT_LABELS: Record<PlantKey, string> = {
+  columbine: "Columbine",
+  honeysuckle: "Honeysuckle",
+  milkweed: "Milkweed",
+  ninebark: "Ninebark",
+  oak: "Oak",
+  serviceberry: "Serviceberry",
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -48,35 +86,41 @@ const styles = StyleSheet.create({
   },
   flower: {
     position: "absolute",
-    width: 100,
-    height: 100,
+    width: FLOWER_SIZE,
+    height: FLOWER_SIZE,
   },
-  menuBar: {
+  carouselBar: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    height: 90,
+    paddingTop: 12,
     paddingBottom: 24,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
     backgroundColor: "rgba(20, 20, 20, 0.85)",
     borderTopWidth: 1,
     borderTopColor: "rgba(255, 255, 255, 0.15)",
   },
-  addButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 24,
-    backgroundColor: "#4a7c59",
+  carouselContent: {
+    paddingHorizontal: 16,
+    alignItems: "center",
+    gap: 16,
   },
-  addButtonPressed: {
-    backgroundColor: "#3a6247",
+  plantThumbWrapper: {
+    alignItems: "center",
   },
-  addButtonText: {
+  plantThumbWrapperPressed: {
+    opacity: 0.6,
+  },
+  plantThumb: {
+    width: 60,
+    height: 60,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  plantLabel: {
+    marginTop: 4,
     color: "white",
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: "600",
   },
 });
@@ -85,15 +129,17 @@ type FlowerPlacement = {
   id: number;
   x: number;
   y: number;
+  type: PlantKey;
 };
 
 type DraggableFlowerProps = {
   initialX: number;
   initialY: number;
   scale: SharedValue<number>;
+  type: PlantKey;
 };
 
-function DraggableFlower({ initialX, initialY, scale }: DraggableFlowerProps) {
+function DraggableFlower({ initialX, initialY, scale, type }: DraggableFlowerProps) {
   const offsetX = useSharedValue(0);
   const offsetY = useSharedValue(0);
   const startX = useSharedValue(0);
@@ -123,7 +169,7 @@ function DraggableFlower({ initialX, initialY, scale }: DraggableFlowerProps) {
   return (
     <GestureDetector gesture={dragGesture}>
       <Animated.Image
-        source={require("../../assets/images/wild_columbine.png")}
+        source={PLANT_IMAGES[type]}
         style={[styles.flower, flowerStyle]}
         resizeMode="contain"
       />
@@ -210,15 +256,16 @@ export default function Flowers() {
     ],
   }));
 
-  const handleAddFlower = () => {
-    const contentWidth = width * ZOOM;
-    const contentHeight = height * ZOOM;
-    const margin = 100;
+  const handleAddFlower = (type: PlantKey) => {
+    // convert the current screen-center point into content-space coordinates,
+    // accounting for whatever pan/zoom is currently applied
+    const centerX = width / 2 - translateX.value / scale.value - FLOWER_SIZE / 2;
+    const centerY = height / 2 - translateY.value / scale.value - FLOWER_SIZE / 2;
 
-    const x = margin + Math.random() * (contentWidth - margin * 2);
-    const y = margin + Math.random() * (contentHeight - margin * 2);
-
-    setFlowers((prev) => [...prev, { id: Date.now() + Math.random(), x, y }]);
+    setFlowers((prev) => [
+      ...prev,
+      { id: Date.now() + Math.random(), x: centerX, y: centerY, type },
+    ]);
   };
 
   return (
@@ -243,22 +290,33 @@ export default function Flowers() {
                 initialX={flower.x}
                 initialY={flower.y}
                 scale={scale}
+                type={flower.type}
               />
             ))}
           </Animated.View>
         </Animated.View>
       </GestureDetector>
 
-      <View style={styles.menuBar}>
-        <Pressable
-          onPress={handleAddFlower}
-          style={({ pressed }) => [
-            styles.addButton,
-            pressed && styles.addButtonPressed,
-          ]}
+      <View style={styles.carouselBar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.carouselContent}
         >
-          <Text style={styles.addButtonText}>Add Wild Columbine</Text>
-        </Pressable>
+          {PLANT_ORDER.map((key) => (
+            <Pressable
+              key={key}
+              onPress={() => handleAddFlower(key)}
+              style={({ pressed }) => [
+                styles.plantThumbWrapper,
+                pressed && styles.plantThumbWrapperPressed,
+              ]}
+            >
+              <Image source={PLANT_IMAGES[key]} style={styles.plantThumb} resizeMode="contain" />
+              <Text style={styles.plantLabel}>{PLANT_LABELS[key]}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
       </View>
     </View>
   );
