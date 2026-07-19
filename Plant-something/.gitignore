@@ -1,0 +1,8 @@
+node_modules
+.expo/
+.agents/
+*.env
+*.env.local
+
+# Keep shareable examples committed.
+!*.env.example

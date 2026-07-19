@@ -1,0 +1,22 @@
+{
+  "name": "plant-something",
+  "version": "1.0.0",
+  "description": "Read this pt3",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Galaxy1111101000/Plant-something.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Galaxy1111101000/Plant-something/issues"
+  },
+  "homepage": "https://github.com/Galaxy1111101000/Plant-something#readme",
+  "dependencies": {
+    "expo-file-system": "^57.0.1"
+  }
+}
