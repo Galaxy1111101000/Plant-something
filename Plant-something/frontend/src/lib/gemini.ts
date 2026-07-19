@@ -36,6 +36,10 @@ async function postToBackend<T>(path: string, body: Record<string, unknown>): Pr
   return data as T;
 }
 
+function getPlantApiKey() {
+  return process.env.EXPO_PUBLIC_PLANT_APIKEY?.trim() || process.env.EXPO_PUBLIC_PLANT_ID_API_KEY?.trim() || "";
+}
+
 export async function getGeminiPlantInfo(plantName: string): Promise<PlantInfo> {
   const data = await postToBackend<{ answer?: string }>('/api/chatbot', { plantName });
 
@@ -47,7 +51,29 @@ export async function getGeminiPlantInfo(plantName: string): Promise<PlantInfo> 
 }
 
 export async function identifyPlantWithBackend(imageBase64: string) {
-  return postToBackend<{ result?: { classification?: { suggestions?: Array<{ name?: string; common_name?: string }> } } }>('/api/identify-plant', {
-    imageBase64
+  const apiKey = getPlantApiKey();
+
+  if (!apiKey) {
+    throw new Error("Plant API key is missing. Set EXPO_PUBLIC_PLANT_APIKEY in frontend/.env.local.");
+  }
+
+  const response = await fetch("https://api.plant.id/v3/identification", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Api-Key": apiKey,
+    },
+    body: JSON.stringify({
+      images: [imageBase64],
+      similar_images: true,
+    }),
   });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error((data as { error?: string }).error || "Plant identification request failed.");
+  }
+
+  return data as { result?: { classification?: { suggestions?: Array<{ name?: string; common_name?: string }> } } };
 }

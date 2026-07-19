@@ -206,6 +206,69 @@ app.get('/api/user-plants', checkJwt, async (req, res) => {
   }
 });
 
+app.get('/api/garden-layout', checkJwt, async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(503).json({ error: 'Database not connected.' });
+    }
+
+    const userId = req.auth.payload.sub;
+    const gardenLayoutCollection = db.collection('User_Garden_Layout');
+    const doc = await gardenLayoutCollection.findOne({ userId });
+
+    res.json({ layout: Array.isArray(doc?.layout) ? doc.layout : [] });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Failed to fetch garden layout.' });
+  }
+});
+
+app.post('/api/garden-layout', checkJwt, async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(503).json({ error: 'Database not connected.' });
+    }
+
+    const userId = req.auth.payload.sub;
+    const { layout } = req.body;
+
+    if (!Array.isArray(layout)) {
+      return res.status(400).json({ error: 'layout must be an array.' });
+    }
+
+    const normalizedLayout = layout
+      .filter((item) => (
+        item
+        && typeof item.id === 'number'
+        && typeof item.x === 'number'
+        && typeof item.y === 'number'
+        && typeof item.type === 'string'
+      ))
+      .map((item) => ({
+        id: item.id,
+        x: item.x,
+        y: item.y,
+        type: item.type,
+      }));
+
+    const gardenLayoutCollection = db.collection('User_Garden_Layout');
+    await gardenLayoutCollection.updateOne(
+      { userId },
+      {
+        $set: {
+          userId,
+          layout: normalizedLayout,
+          updatedAt: new Date(),
+        },
+      },
+      { upsert: true },
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Failed to save garden layout.' });
+  }
+});
+
 // Debug endpoint: check all plants in database (remove in production)
 app.get('/debug/all-plants', async (req, res) => {
   try {

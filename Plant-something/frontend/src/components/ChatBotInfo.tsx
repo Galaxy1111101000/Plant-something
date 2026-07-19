@@ -11,6 +11,7 @@ import {
 type Props = {
   imageUri: string | null;
   info: string | null;
+  newUnlockedPlant: string | null;
   loading: boolean;
   error: string | null;
   onBack: () => void;
@@ -20,6 +21,7 @@ type Props = {
 export default function ChatBotInfo({
   imageUri,
   info,
+  newUnlockedPlant,
   loading,
   error,
   onBack,
@@ -29,7 +31,7 @@ export default function ChatBotInfo({
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.backButtonText}>↺ Retake</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Plant Info</Text>
       </View>
@@ -38,6 +40,13 @@ export default function ChatBotInfo({
         {imageUri ? <Image source={{ uri: imageUri }} style={styles.image} /> : null}
 
         <View style={styles.card}>
+          {newUnlockedPlant ? (
+            <View style={styles.unlockBanner}>
+              <Text style={styles.unlockBannerTitle}>New Plant Unlocked</Text>
+              <Text style={styles.unlockBannerText}>{newUnlockedPlant}</Text>
+            </View>
+          ) : null}
+
           <Text style={styles.sectionTitle}>Analysis</Text>
 
           {loading ? (
@@ -109,6 +118,28 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
+  },
+  unlockBanner: {
+    backgroundColor: "#e8f5eb",
+    borderWidth: 1,
+    borderColor: "#b7e4c7",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  unlockBannerTitle: {
+    color: "#1f7a3d",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  unlockBannerText: {
+    marginTop: 2,
+    color: "#1b4d2e",
+    fontSize: 16,
+    fontWeight: "700",
   },
   sectionTitle: {
     fontSize: 18,

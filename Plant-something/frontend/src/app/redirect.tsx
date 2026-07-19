@@ -2,9 +2,12 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, View, Text } from "react-native";
 import * as Linking from "expo-linking";
 import * as AuthSession from "expo-auth-session";
+import * as WebBrowser from "expo-web-browser";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { saveSession, getAuth0Config } from "@/lib/auth0";
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function RedirectScreen() {
   const router = useRouter();
@@ -90,10 +93,10 @@ export default function RedirectScreen() {
 
         setMessage("Redirecting...");
 
-        // Navigate back to home after a brief delay
+        // Navigate back to the sign-in page; it will route to /home once the session is loaded.
         setTimeout(() => {
           router.replace("/");
-        }, 500);
+        }, 200);
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : "Unknown error during authentication.";
         setError(errorMsg);

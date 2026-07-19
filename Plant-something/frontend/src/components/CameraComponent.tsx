@@ -74,6 +74,7 @@ const styles = StyleSheet.create({
 
 // App.tsx
 import React, { useState, useRef } from "react";
+import { router } from "expo-router";
 import {
   StyleSheet,
   Text,
@@ -84,16 +85,48 @@ import {
 import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
 import { getChatbotResponse } from "./chatbot";
 import ChatBotInfo from "./ChatBotInfo";
-import FlowersUI from "./flowersUI";
 import { identifyPlantWithBackend, getBackendUrl } from "../lib/gemini";
 import { getAccessToken } from "../lib/auth0";
+
+const SPRITE_ALIASES: Record<string, string[]> = {
+  Columbine: ["columbine", "aquilegia scopulorum"],
+  Honeysuckle: ["honeysuckle", "coral honeysuckle", "lonicera periclymenum"],
+  Milkweed: ["milkweed", "common milkweed", "asclepias syriac"],
+  Ninebark: ["ninebark", "physocarpus opulifolius"],
+  Oak: ["oak", "quercus"],
+  Serviceberry: ["serviceberry", "amelanchier"],
+  "Wild Columbine": ["wild columbine", "aquilegia scopulorum"],
+};
+
+const normalizePlant = (value: string) => value.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+
+const getSpriteLabelForPlant = (plantName: string): string | null => {
+  const normalizedName = normalizePlant(plantName);
+
+  for (const [label, aliases] of Object.entries(SPRITE_ALIASES)) {
+    const candidates = [label, ...aliases].map(normalizePlant);
+    if (candidates.some((candidate) => normalizedName.includes(candidate) || candidate.includes(normalizedName))) {
+      return label;
+    }
+  }
+
+  return null;
+};
+
+const hasPlantBeenFoundBefore = (plantName: string, existingPlantNames: string[]) => {
+  const normalizedName = normalizePlant(plantName);
+
+  return existingPlantNames
+    .map(normalizePlant)
+    .some((existing) => existing.includes(normalizedName) || normalizedName.includes(existing));
+};
 
 export default function CameraComponent() {
   const [permission, requestPermission] = useCameraPermissions();
   const [image, setImage] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
-  const [showFlowers, setShowFlowers] = useState(false);
   const [infoText, setInfoText] = useState<string | null>(null);
+  const [newUnlockedPlant, setNewUnlockedPlant] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
@@ -103,6 +136,7 @@ export default function CameraComponent() {
       setLoading(true);
       setError(null);
       setInfoText(null);
+      setNewUnlockedPlant(null);
 
       const data = await cameraRef.current.takePictureAsync({
         quality: 1,
@@ -124,7 +158,7 @@ export default function CameraComponent() {
           }
 
           try {
-            let plantName = "tree"; // Default for testing
+            let plantName = "Asclepias syriaca"; // Default for testing
             
             try {
               const result = await identifyPlantWithBackend(base64);
@@ -135,7 +169,7 @@ export default function CameraComponent() {
               }
               console.log("Plant ID result:", result);
             } catch (idErr) {
-              console.warn("Plant identification failed, using fallback name 'tree':", idErr);
+              console.warn("Plant identification failed, using fallback name 'Asclepias syriaca':", idErr);
             }
 
             console.log("Most likely plant:", plantName);
@@ -156,9 +190,33 @@ export default function CameraComponent() {
               } else {
                 const backendUrl = getBackendUrl();
                 console.log("Backend URL:", backendUrl);
+                const spriteLabel = getSpriteLabelForPlant(plantName);
+                let shouldShowNewPlantUnlock = false;
                 
                 // Convert base64 to data URL so it can be stored and displayed
                 const imageDataUrl = `data:image/jpeg;base64,${base64}`;
+
+                try {
+                  const existingPlantsResponse = await fetch(`${backendUrl}/api/user-plants`, {
+                    headers: {
+                      Authorization: `Bearer ${accessToken}`,
+                    },
+                  });
+
+                  if (existingPlantsResponse.ok && spriteLabel) {
+                    const existingPlantsData = (await existingPlantsResponse.json()) as {
+                      plants?: Array<{ plantName?: string }>;
+                    };
+
+                    const existingPlantNames = (existingPlantsData.plants ?? [])
+                      .map((plant) => plant.plantName?.trim())
+                      .filter((name): name is string => Boolean(name));
+
+                    shouldShowNewPlantUnlock = !hasPlantBeenFoundBefore(plantName, existingPlantNames);
+                  }
+                } catch (existingPlantsErr) {
+                  console.warn("Unable to check existing plants before save:", existingPlantsErr);
+                }
                 
                 console.log("Sending save-plant request with:", {
                   plantName,
@@ -191,6 +249,15 @@ export default function CameraComponent() {
                 } else {
                   const result = await response.json();
                   console.log("✅ Plant saved successfully!", result);
+
+                  if (shouldShowNewPlantUnlock && spriteLabel) {
+                    setNewUnlockedPlant(spriteLabel);
+                    setInfoText((current) => {
+                      const unlockMessage = `\n\nNew plant unlocked: ${spriteLabel}`;
+                      const baseInfo = current ?? chatbotReply?.answer ?? JSON.stringify(chatbotReply);
+                      return baseInfo.includes(unlockMessage.trim()) ? baseInfo : `${baseInfo}${unlockMessage}`;
+                    });
+                  }
                 }
               }
             } catch (saveErr) {
@@ -213,16 +280,16 @@ export default function CameraComponent() {
   const retakePicture = () => {
     setImage(null);
     setShowInfo(false);
-    setShowFlowers(false);
     setInfoText(null);
+    setNewUnlockedPlant(null);
     setError(null);
     setLoading(false);
   };
 
   const goBackToCamera = () => {
     setShowInfo(false);
-    setShowFlowers(false);
     setInfoText(null);
+    setNewUnlockedPlant(null);
     setError(null);
     setLoading(false);
     setImage(null);
@@ -235,62 +302,52 @@ export default function CameraComponent() {
 
   if (!permission.granted) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.message}>We need your permission to show the camera</Text>
-        <TouchableOpacity style={styles.takePictureButton} onPress={requestPermission}>
-          <Text style={styles.takePictureButtonText}>Grant Permission</Text>
+      <View style={styles.permissionContainer}>
+        <Text style={styles.permissionTitle}>Camera Access Needed</Text>
+        <Text style={styles.permissionSubtitle}>
+          We need your permission to show the camera and identify plants.
+        </Text>
+        <TouchableOpacity style={styles.primaryButton} onPress={requestPermission}>
+          <Text style={styles.primaryButtonText}>Grant Permission</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
   if (showInfo) {
-    if (showFlowers) {
-      return (
-        <FlowersUI
-          imageUri={image}
-          info={infoText}
-          onBack={() => setShowFlowers(false)}
-        />
-      );
-    }
-
     return (
       <ChatBotInfo
         imageUri={image}
         info={infoText}
+        newUnlockedPlant={newUnlockedPlant}
         loading={loading}
         error={error}
         onBack={goBackToCamera}
-        onShowFlowers={() => setShowFlowers(true)}
+        onShowFlowers={() => router.push('/garden')}
       />
     );
   }
 
   return (
     <View style={styles.container}>
-      <View style={styles.box}>
+      <View style={styles.viewfinder}>
         {!image ? (
-          <View style={styles.cameraContainer}>
-            <CameraView
-              ref={cameraRef}
-              style={styles.fixedRatio}
-              facing={"back" as CameraType}
-            />
-          </View>
+          <CameraView
+            ref={cameraRef}
+            style={styles.camera}
+            facing={"back" as CameraType}
+          />
         ) : (
-          <View style={styles.imageContainer}>
-            <Image source={{ uri: image }} style={styles.previewImage} />
-            <TouchableOpacity style={styles.retakeButton} onPress={retakePicture}>
-              <Text style={styles.retakeButtonText}>Retake</Text>
-            </TouchableOpacity>
-          </View>
+          <Image source={{ uri: image }} style={styles.previewImage} />
         )}
       </View>
+
       {!image && (
-        <TouchableOpacity style={styles.takePictureButton} onPress={takePicture}>
-          <Text style={styles.takePictureButtonText}>Take Picture</Text>
-        </TouchableOpacity>
+        <View style={styles.controlBar}>
+          <TouchableOpacity style={styles.shutterButton} onPress={takePicture}>
+            <View style={styles.shutterButtonInner} />
+          </TouchableOpacity>
+        </View>
       )}
     </View>
   );
@@ -299,62 +356,78 @@ export default function CameraComponent() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#f6fff8",
   },
-  message: {
-    textAlign: "center",
-    padding: 20,
-  },
-  box: {
-    flex: 0.7,
-    width: "72%",
-    maxWidth: 320,
-    alignSelf: "center",
-    borderWidth: 2,
-    borderColor: "black",
-    marginTop: 12,
-    marginBottom: 12,
-    overflow: "hidden",
-    borderRadius: 10,
-  },
-  cameraContainer: {
-    flex: 1,
-    aspectRatio: 1,
-  },
-  fixedRatio: {
-    flex: 1,
-    aspectRatio: 1,
-  },
-  takePictureButton: {
-    backgroundColor: "blue",
-    padding: 20,
-    borderRadius: 10,
-    alignSelf: "center",
-    position: "absolute",
-    bottom: 30,
-  },
-  takePictureButtonText: {
-    color: "white",
-    fontSize: 18,
-  },
-  imageContainer: {
+  permissionContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#f6fff8",
+    paddingHorizontal: 24,
+  },
+  permissionTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#1f7a3d",
+    textAlign: "center",
+  },
+  permissionSubtitle: {
+    marginTop: 8,
+    fontSize: 15,
+    color: "#4a7c59",
+    textAlign: "center",
+    lineHeight: 21,
+  },
+  primaryButton: {
+    marginTop: 24,
+    width: "100%",
+    paddingVertical: 18,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#1f7a3d",
+  },
+  primaryButtonText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  viewfinder: {
+    flex: 1,
+    overflow: "hidden",
+  },
+  camera: {
+    flex: 1,
   },
   previewImage: {
     flex: 1,
     width: "100%",
     resizeMode: "cover",
   },
-  retakeButton: {
-    position: "absolute",
-    bottom: 30,
-    backgroundColor: "red",
-    padding: 20,
-    borderRadius: 10,
+  controlBar: {
+    height: 90,
+    paddingBottom: 24,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(20, 20, 20, 0.85)",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.15)",
   },
-  retakeButtonText: {
-    color: "white",
-    fontSize: 18,
+  shutterButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderWidth: 3,
+    borderColor: "white",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  shutterButtonInner: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#4a7c59",
   },
 });

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View, AppState } from "react-native";
 import * as AuthSession from "expo-auth-session";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { router } from "expo-router";
 import { clearSession, getAuth0Config, loadSession, saveSession } from "@/lib/auth0";
 
 const useProxy = true;
@@ -74,7 +75,11 @@ export default function AuthGate({ children }: AuthGateProps) {
           clientId: config.clientId,
           redirectUri,
           scopes: ["openid", "profile", "email"],
-          extraParams: config.audience ? { audience: config.audience } : {},
+          extraParams: {
+            ...(config.audience ? { audience: config.audience } : {}),
+            // Force Universal Login instead of silently reusing an existing SSO session.
+            prompt: "login",
+          },
           usePKCE: true,
         },
         discovery,
@@ -131,9 +136,11 @@ export default function AuthGate({ children }: AuthGateProps) {
   };
 
   const signOut = async () => {
+    await AuthSession.dismiss();
     await clearSession();
     setSession(null);
     setError(null);
+    router.replace("/");
   };
 
   if (!ready) {
